@@ -8,6 +8,17 @@ const PORT = 3000;
 // Middleware
 app.use(bodyParser.json());
 
+// Helper function สำหรับการตอบกลับข้อผิดพลาด
+function formatError(error) {
+    let errorDetails;
+    try {
+        errorDetails = JSON.parse(error.error);
+    } catch (parseError) {
+        errorDetails = { message: error.message };
+    }
+    return errorDetails;
+}
+
 // API Endpoint สำหรับตรวจสอบ Voucher
 app.post('/verify-voucher', async (req, res) => {
     const { voucher_id, mobile } = req.body;
@@ -31,18 +42,14 @@ app.post('/verify-voucher', async (req, res) => {
         });
 
         const jsonResponse = JSON.parse(response);
-        res.status(200).json(jsonResponse);
+        return res.status(200).json({
+            status: 'success',
+            data: jsonResponse
+        });
 
     } catch (error) {
-        let errorDetails;
-
-        try {
-            errorDetails = JSON.parse(error.error);
-        } catch (parseError) {
-            errorDetails = { message: error.message };
-        }
-
-        res.status(500).json({
+        const errorDetails = formatError(error);
+        return res.status(500).json({
             status: 'error',
             message: 'Failed to verify voucher',
             error: errorDetails
@@ -68,7 +75,8 @@ app.post('/redeem-voucher', async (req, res) => {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36',
                 'Accept': 'application/json',
-                'Referer': 'https://gift.truemoney.com/'
+                'Referer': 'https://gift.truemoney.com/',
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 mobile: mobile,
@@ -77,18 +85,14 @@ app.post('/redeem-voucher', async (req, res) => {
         });
 
         const jsonResponse = JSON.parse(response);
-        res.status(200).json(jsonResponse);
+        return res.status(200).json({
+            status: 'success',
+            data: jsonResponse
+        });
 
     } catch (error) {
-        let errorDetails;
-
-        try {
-            errorDetails = JSON.parse(error.error);
-        } catch (parseError) {
-            errorDetails = { message: error.message };
-        }
-
-        res.status(500).json({
+        const errorDetails = formatError(error);
+        return res.status(500).json({
             status: 'error',
             message: 'Failed to redeem voucher',
             error: errorDetails
