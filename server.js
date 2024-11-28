@@ -1,22 +1,47 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cloudscraper = require('cloudscraper');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const PORT = 3000;
 
-// Middleware
 app.use(bodyParser.json());
 
-// Helper function สำหรับการตอบกลับข้อผิดพลาด
-function formatError(error) {
-    let errorDetails;
+// Helper function สำหรับ Puppeteer
+async function redeemVoucherWithPuppeteer(voucherHash, mobile) {
+    const browser = await puppeteer.launch({ headless: true });
+    const page = await browser.newPage();
+
     try {
-        errorDetails = JSON.parse(error.error);
-    } catch (parseError) {
-        errorDetails = { message: error.message };
+        await page.goto(`https://gift.truemoney.com/campaign/vouchers/${voucherHash}/redeem`, {
+            waitUntil: 'networkidle2',
+        });
+
+        // กรอกข้อมูลลงในฟอร์ม
+        await page.evaluate(
+            (mobile) => {
+                document.querySelector('input[name="mobile"]').value = mobile;
+                document.querySelector('input[name="voucher_hash"]').value = voucherHash;
+                document.querySelector('form').submit();
+            },
+            mobile
+        );
+
+        // รอผลลัพธ์จากการ Redeem
+        await page.waitForResponse((response) => response.url().includes('redeem') && response.status() === 200);
+
+        // ดึงผลลัพธ์
+        const result = await page.evaluate(() => {
+            return JSON.parse(document.body.innerText);
+        });
+
+        return { status: 'success', data: result };
+    } catch (error) {
+        return { status: 'error', message: error.message };
+    } finally {
+        await browser.close();
     }
-    return errorDetails;
 }
 
 // API Endpoint สำหรับตรวจสอบ Voucher
@@ -26,7 +51,7 @@ app.post('/verify-voucher', async (req, res) => {
     if (!voucher_id || !mobile) {
         return res.status(400).json({
             status: 'error',
-            message: 'Missing voucher_id or mobile'
+            message: 'Missing voucher_id or mobile',
         });
     }
 
@@ -36,23 +61,21 @@ app.post('/verify-voucher', async (req, res) => {
         const response = await cloudscraper.get(verifyUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36',
-                'Accept': 'application/json',
-                'Referer': 'https://gift.truemoney.com/'
-            }
+                Accept: 'application/json',
+                Referer: 'https://gift.truemoney.com/',
+            },
         });
 
         const jsonResponse = JSON.parse(response);
         return res.status(200).json({
             status: 'success',
-            data: jsonResponse
+            data: jsonResponse,
         });
-
     } catch (error) {
-        const errorDetails = formatError(error);
         return res.status(500).json({
             status: 'error',
             message: 'Failed to verify voucher',
-            error: errorDetails
+            error: error.message,
         });
     }
 });
@@ -64,40 +87,17 @@ app.post('/redeem-voucher', async (req, res) => {
     if (!mobile || !voucher_hash) {
         return res.status(400).json({
             status: 'error',
-            message: 'Missing mobile or voucher_hash'
+            message: 'Missing mobile or voucher_hash',
         });
     }
 
-    const redeemUrl = `https://gift.truemoney.com/campaign/vouchers/${voucher_hash}/redeem`;
+    const result = await redeemVoucherWithPuppeteer(voucher_hash, mobile);
 
-    try {
-        const response = await cloudscraper.post(redeemUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36',
-                'Accept': 'application/json',
-                'Referer': 'https://gift.truemoney.com/',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                mobile: mobile,
-                voucher_hash: voucher_hash
-            })
-        });
-
-        const jsonResponse = JSON.parse(response);
-        return res.status(200).json({
-            status: 'success',
-            data: jsonResponse
-        });
-
-    } catch (error) {
-        const errorDetails = formatError(error);
-        return res.status(500).json({
-            status: 'error',
-            message: 'Failed to redeem voucher',
-            error: errorDetails
-        });
+    if (result.status === 'error') {
+        return res.status(500).json(result);
     }
+
+    return res.status(200).json(result);
 });
 
 // เริ่มต้นเซิร์ฟเวอร์
