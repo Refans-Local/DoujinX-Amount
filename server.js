@@ -12,7 +12,6 @@ app.use(bodyParser.json());
 app.post('/verify-voucher', async (req, res) => {
     const { voucher_id, mobile } = req.body;
 
-    // ตรวจสอบค่าที่ส่งเข้ามา
     if (!voucher_id || !mobile) {
         return res.status(400).json({
             status: 'error',
@@ -20,11 +19,9 @@ app.post('/verify-voucher', async (req, res) => {
         });
     }
 
-    // สร้าง URL สำหรับตรวจสอบ
     const verifyUrl = `https://gift.truemoney.com/campaign/vouchers/${voucher_id}/verify?mobile=${mobile}`;
 
     try {
-        // ส่งคำขอผ่าน Cloudscraper
         const response = await cloudscraper.get(verifyUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36',
@@ -33,7 +30,6 @@ app.post('/verify-voucher', async (req, res) => {
             }
         });
 
-        // แปลงผลลัพธ์เป็น JSON และส่งกลับ
         const jsonResponse = JSON.parse(response);
         res.status(200).json(jsonResponse);
 
@@ -41,16 +37,60 @@ app.post('/verify-voucher', async (req, res) => {
         let errorDetails;
 
         try {
-            // พยายามแปลงข้อความใน error เป็น JSON
             errorDetails = JSON.parse(error.error);
         } catch (parseError) {
-            // หากแปลงไม่ได้ แสดงข้อความดั้งเดิม
             errorDetails = { message: error.message };
         }
 
         res.status(500).json({
             status: 'error',
             message: 'Failed to verify voucher',
+            error: errorDetails
+        });
+    }
+});
+
+// API Endpoint สำหรับ Redeem Voucher
+app.post('/redeem-voucher', async (req, res) => {
+    const { mobile, voucher_hash } = req.body;
+
+    if (!mobile || !voucher_hash) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Missing mobile or voucher_hash'
+        });
+    }
+
+    const redeemUrl = `https://gift.truemoney.com/campaign/vouchers/${voucher_hash}/redeem`;
+
+    try {
+        const response = await cloudscraper.post(redeemUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+                'Referer': 'https://gift.truemoney.com/'
+            },
+            body: JSON.stringify({
+                mobile: mobile,
+                voucher_hash: voucher_hash
+            })
+        });
+
+        const jsonResponse = JSON.parse(response);
+        res.status(200).json(jsonResponse);
+
+    } catch (error) {
+        let errorDetails;
+
+        try {
+            errorDetails = JSON.parse(error.error);
+        } catch (parseError) {
+            errorDetails = { message: error.message };
+        }
+
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to redeem voucher',
             error: errorDetails
         });
     }
