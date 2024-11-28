@@ -80,6 +80,53 @@ app.post('/verify-voucher', async (req, res) => {
     }
 });
 
+// Helper function สำหรับ Redeem Voucher
+async function redeemVoucherWithPuppeteer(voucherHash, mobile) {
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+    const page = await browser.newPage();
+
+    try {
+        console.log(`Navigating to Redeem URL: https://gift.truemoney.com/campaign/vouchers/${voucherHash}/redeem`);
+
+        // กำหนด Timeout
+        await page.goto(`https://gift.truemoney.com/campaign/vouchers/${voucherHash}/redeem`, {
+            waitUntil: 'networkidle2',
+            timeout: 60000, // 60 วินาที
+        });
+
+        console.log('Page loaded successfully. Filling form...');
+        
+        // กรอกข้อมูลลงในฟอร์ม
+        await page.evaluate(
+            (mobile, voucherHash) => {
+                document.querySelector('input[name="mobile"]').value = mobile;
+                document.querySelector('input[name="voucher_hash"]').value = voucherHash;
+                document.querySelector('form').submit();
+            },
+            mobile,
+            voucherHash
+        );
+
+        console.log('Form submitted. Waiting for response...');
+
+        // รอผลลัพธ์จากการ Redeem
+        const response = await page.waitForResponse(
+            (response) => response.url().includes('redeem') && response.status() === 200,
+            { timeout: 60000 } // 60 วินาที
+        );
+
+        console.log('Response received. Parsing response...');
+        
+        const result = await response.json();
+        return { status: 'success', data: result };
+    } catch (error) {
+        console.error('Puppeteer Error:', error.message);
+        return { status: 'error', message: error.message };
+    } finally {
+        await browser.close();
+    }
+}
+
 // API Endpoint สำหรับ Redeem Voucher
 app.post('/redeem-voucher', async (req, res) => {
     const { mobile, voucher_hash } = req.body;
@@ -90,6 +137,8 @@ app.post('/redeem-voucher', async (req, res) => {
             message: 'Missing mobile or voucher_hash',
         });
     }
+
+    console.log(`Redeeming voucher for mobile: ${mobile}, voucher_hash: ${voucher_hash}`);
 
     const result = await redeemVoucherWithPuppeteer(voucher_hash, mobile);
 
