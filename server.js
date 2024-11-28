@@ -38,11 +38,20 @@ app.post('/verify-voucher', async (req, res) => {
         res.status(200).json(jsonResponse);
 
     } catch (error) {
-        console.error('Cloudflare Bypass Failed:', error.message);
+        let errorDetails;
+
+        try {
+            // พยายามแปลงข้อความใน error เป็น JSON
+            errorDetails = JSON.parse(error.error);
+        } catch (parseError) {
+            // หากแปลงไม่ได้ แสดงข้อความดั้งเดิม
+            errorDetails = { message: error.message };
+        }
+
         res.status(500).json({
             status: 'error',
             message: 'Failed to verify voucher',
-            error: error.message
+            error: errorDetails
         });
     }
 });
