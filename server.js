@@ -1,6 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const cloudscraper = require('cloudscraper');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const PORT = 3000;
@@ -10,13 +10,45 @@ app.use(bodyParser.json());
 
 // Helper function สำหรับการตอบกลับข้อผิดพลาด
 function formatError(error) {
-    let errorDetails;
+    return { message: error.message || 'Unknown error occurred' };
+}
+
+// Helper function สำหรับ Puppeteer Request
+async function performPuppeteerRequest(url, method, payload = null) {
+    const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
     try {
-        errorDetails = JSON.parse(error.error);
-    } catch (parseError) {
-        errorDetails = { message: error.message };
+        const page = await browser.newPage();
+        await page.setUserAgent(
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36'
+        );
+
+        // ทำ POST หรือ GET request ผ่าน Puppeteer
+        await page.goto(url, { waitUntil: 'networkidle2' });
+
+        if (method === 'POST' && payload) {
+            const response = await page.evaluate(async (url, payload) => {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+                return await res.json();
+            }, url, payload);
+
+            return response;
+        } else {
+            const content = await page.content();
+            return JSON.parse(content);
+        }
+    } finally {
+        await browser.close();
     }
-    return errorDetails;
 }
 
 // API Endpoint สำหรับตรวจสอบ Voucher
@@ -33,20 +65,11 @@ app.post('/verify-voucher', async (req, res) => {
     const verifyUrl = `https://gift.truemoney.com/campaign/vouchers/${voucher_id}/verify?mobile=${mobile}`;
 
     try {
-        const response = await cloudscraper.get(verifyUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36',
-                'Accept': 'application/json',
-                'Referer': 'https://gift.truemoney.com/'
-            }
-        });
-
-        const jsonResponse = JSON.parse(response);
+        const jsonResponse = await performPuppeteerRequest(verifyUrl, 'GET');
         return res.status(200).json({
             status: 'success',
             data: jsonResponse
         });
-
     } catch (error) {
         const errorDetails = formatError(error);
         return res.status(500).json({
@@ -71,25 +94,14 @@ app.post('/redeem-voucher', async (req, res) => {
     const redeemUrl = `https://gift.truemoney.com/campaign/vouchers/${voucher_hash}/redeem`;
 
     try {
-        const response = await cloudscraper.post(redeemUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36',
-                'Accept': 'application/json',
-                'Referer': 'https://gift.truemoney.com/',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                mobile: mobile,
-                voucher_hash: voucher_hash
-            })
+        const jsonResponse = await performPuppeteerRequest(redeemUrl, 'POST', {
+            mobile: mobile,
+            voucher_hash: voucher_hash
         });
-
-        const jsonResponse = JSON.parse(response);
         return res.status(200).json({
             status: 'success',
             data: jsonResponse
         });
-
     } catch (error) {
         const errorDetails = formatError(error);
         return res.status(500).json({
