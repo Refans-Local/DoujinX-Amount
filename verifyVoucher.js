@@ -30,12 +30,19 @@ app.post('/verify-voucher', async (req, res) => {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.36',
                 'Accept': 'application/json',
                 'Referer': 'https://gift.truemoney.com/'
+            },
+            agentOptions: {
+                minVersion: 'TLSv1.3', // กำหนดให้ใช้ TLS 1.3
+                maxVersion: 'TLSv1.3'  // จำกัดเวอร์ชันสูงสุดเป็น TLS 1.3
             }
         });
 
         // แปลงผลลัพธ์เป็น JSON และส่งกลับ
         const jsonResponse = JSON.parse(response);
-        res.status(200).json(jsonResponse);
+        return res.status(200).json({
+            status: 'success',
+            data: jsonResponse
+        });
 
     } catch (error) {
         let errorDetails;
@@ -48,7 +55,7 @@ app.post('/verify-voucher', async (req, res) => {
             errorDetails = { message: error.message };
         }
 
-        res.status(500).json({
+        return res.status(500).json({
             status: 'error',
             message: 'Failed to verify voucher',
             error: errorDetails
